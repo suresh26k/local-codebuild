@@ -274,6 +274,13 @@ function set_configuration_parameters() {
     set_build_image
 }
 
+function run_build() {
+#    {host} docker run -v /path/to/hostdir:/mnt --name my_container my_image
+#    {host} docker exec -it my_container bash
+#    {container} cp /mnt/sourcefile /path/to/destfile
+    echo ""
+}
+
 ########################################################################################################################
 # MAIN FUNCTION                                                                                                        #
 ########################################################################################################################
@@ -282,6 +289,7 @@ function set_configuration_parameters() {
 function main() {
     read_configuration
     set_configuration_parameters
+    run_build
 }
 
 # Calling main function
