@@ -24,7 +24,7 @@ export _BOLD_TEXT=$(echo -en '\033[00;1m')
 export _SUCCESS_CLR=$(echo -en '\033[00;32m')
 export _GENERAL_CLR=$(echo -en '\033[00;33m')
 export _SUB_GEN_CLR=$(echo -en '\033[00;36m')
-export _LINE_CLR=$(echo -en '\033[00;35m')
+export _NOTE_CLR=$(echo -en '\033[00;35m')
 export _ERROR_CLR=$(echo -en '\033[00;31m')
 
 ########################################################################################################################
@@ -32,23 +32,28 @@ export _ERROR_CLR=$(echo -en '\033[00;31m')
 ########################################################################################################################
 
 # If --help argument is passed or no argument is passed
-if (($# == 1)) && [ $1 = "--help" ]; then
-    cat <<HELP_DOC
+if { (($# == 1)); } && { [ $1 = "--help" ] || [ $1 == "--debug" ]; }; then
+
+    if [ $1 == "--debug" ]; then
+        set -x
+    else
+        cat <<HELP_DOC
 
     $_BOLD_TEXT LOCAL CODEBUILD $_NORMAL_CLR
 HELP_DOC
 
-    (
-        echo "cat <<EOF"
-        cat help.txt
-        echo EOF
-    ) | sh
-    exit 0
+        (
+            echo "cat <<EOF"
+            cat help.txt
+            echo EOF
+        ) | sh
+        exit 0
+    fi
 
 else
     # If even number of arguments are not passed
     if (($# % 2 != 0)); then
-        echo -e "$_ERROR_CLR> Please provide a valid argument $_NORMAL_CLR"
+        echo -e "$_ERROR_CLR> Please provide a valid argument. $_NORMAL_CLR"
         exit 1
     fi
 fi
@@ -63,7 +68,7 @@ function set_argument() {
         PARAMETER_TEXTX="$2"
         ;;
     *)
-        echo -e "$_ERROR_CLR> Please provide a valid argument $_NORMAL_CLR"
+        echo -e "$_ERROR_CLR> Please provide a valid argument. $_NORMAL_CLR"
         exit 1
         ;;
     esac
@@ -82,13 +87,13 @@ done
 function read_configuration() {
     # If config file parameter is not set
     if [ -v ${CONFIG_FILE} ]; then
-        echo -e "$_GENERAL_CLR> Configuration file is not provided, so reading default file - ${_SUB_GEN_CLR} local_codebuild_config.yml $_NORMAL_CLR"
+        echo -e "$_GENERAL_CLR> Configuration file is not provided, so reading default file - ${_SUB_GEN_CLR} local_codebuild_config.yml${_GENERAL_CLR}. $_NORMAL_CLR"
         CONFIG_FILE="local_codebuild_config.yml"
     fi
 
     # Checking if config file exists
     if [ -f ${CONFIG_FILE} ]; then
-        echo -e "$_GENERAL_CLR> Fetching configuration from file - ${_SUB_GEN_CLR} ${CONFIG_FILE} $_NORMAL_CLR"
+        echo -e "$_GENERAL_CLR> Fetching configuration from file - ${_SUB_GEN_CLR} ${CONFIG_FILE}${_GENERAL_CLR}. $_NORMAL_CLR"
 
         # Setting Parameters
         DEPLOYMENT_SOURCE_TYPE=$(cat $CONFIG_FILE | wildq --input yaml ".deployment_source_type")
@@ -100,7 +105,7 @@ function read_configuration() {
         # NOTE - wildq returns None if key is not found
 
     else
-        echo -e "$_ERROR_CLR> Configuration file ${_SUB_GEN_CLR}${CONFIG_FILE}${_ERROR_CLR} does not exists. Please provide a valid configuration file $_NORMAL_CLR"
+        echo -e "$_ERROR_CLR> Configuration file ${_SUB_GEN_CLR}${CONFIG_FILE}${_ERROR_CLR} does not exists. Please provide a valid configuration file. $_NORMAL_CLR"
         exit 1
     fi
 
@@ -121,9 +126,9 @@ function fetch_credentials() {
 
     # Checking if credential file exists
     if [ -f ${AWS_CREDENTIAL_FILE} ]; then
-        echo -e "$_GENERAL_CLR> Fetching AWS credentials from credentials file - $_SUB_GEN_CLR ${AWS_CREDENTIAL_FILE} ${_GENERAL_CLR}- for profile ${_SUB_GEN_CLR}${AWS_PROFILE_ARG}${_NORMAL_CLR}"
+        echo -e "$_GENERAL_CLR> Fetching AWS credentials from credentials file - $_SUB_GEN_CLR ${AWS_CREDENTIAL_FILE} ${_GENERAL_CLR}- for profile ${_SUB_GEN_CLR}${AWS_PROFILE_ARG}${_GENERAL_CLR}.${_NORMAL_CLR}"
     else
-        echo -e "$_ERROR_CLR> AWS credential file ${_SUB_GEN_CLR}${AWS_CREDENTIAL_FILE}${_ERROR_CLR} does not exists. Please provide a valid credential file $_NORMAL_CLR"
+        echo -e "$_ERROR_CLR> AWS credential file ${_SUB_GEN_CLR}${AWS_CREDENTIAL_FILE}${_ERROR_CLR} does not exists. Please provide a valid credential file. $_NORMAL_CLR"
         exit 1
     fi
 
@@ -139,10 +144,11 @@ function fetch_credentials() {
         export AWS_SESSION_TOKEN=$(echo $credentials | jq -r .aws_session_token)
         export AWS_DEFAULT_REGION=$(echo $credentials | jq -r .region)
     else
-        echo "${_ERROR_CLR}> ${_SUB_GEN_CLR}${AWS_PROFILE_ARG}${_ERROR_CLR} profile does not exists in credential file - $_SUB_GEN_CLR $AWS_CREDENTIAL_FILE $_NORMAL_CLR"
+        echo "${_ERROR_CLR}> ${_SUB_GEN_CLR}${AWS_PROFILE_ARG}${_ERROR_CLR} profile does not exists in credential file - $_SUB_GEN_CLR $AWS_CREDENTIAL_FILE. $_NORMAL_CLR"
         exit 1
     fi
 }
+
 function validate_and_set_aws_credentials() {
     # Setting AWS Credentials file if provided in configurations or else using default value
     if [ "$TEMP_AWS_CREDENTIAL_FILE" != "None" ]; then
@@ -166,11 +172,11 @@ function validate_and_set_aws_credentials() {
 
             else
 
-                echo -e "$_GENERAL_CLR> Fetching credentials from environment variables $_NORMAL_CLR"
+                echo -e "$_GENERAL_CLR> Fetching credentials from environment variables. $_NORMAL_CLR"
             fi
         fi
     else
-        echo -e "$_ERROR_CLR> Please provide a valid deployment source type $_NORMAL_CLR"
+        echo -e "$_ERROR_CLR> Please provide a valid deployment source type. $_NORMAL_CLR"
     fi
 
 }
@@ -183,7 +189,7 @@ function validate_and_set_deployment_source() {
             echo -e "$_ERROR_CLR> Please provide a valid deployment source type. Check parameter ${_SUB_GEN_CLR}deployment_source_type${_ERROR_CLR} in your configuration file.$_NORMAL_CLR"
             exit 1
         else
-            echo -e "$_GENERAL_CLR> Setting deployment source type as - ${_SUB_GEN_CLR} ${DEPLOYMENT_SOURCE_TYPE}${_NORMAL_CLR}"
+            echo -e "$_GENERAL_CLR> Setting deployment source type as - ${_SUB_GEN_CLR} ${DEPLOYMENT_SOURCE_TYPE}${_GENERAL_CLR}.${_NORMAL_CLR}"
 
             # DEPLOYMENT SOURCE
             if [ "$DEPLOYMENT_SOURCE" != "None" ]; then
@@ -212,21 +218,47 @@ function validate_and_set_deployment_source() {
 
 }
 
-# BUILDSPEC
-if [ "$BUILDSPEC_FILE" == "None" ]; then
-    echo -e "$_ERROR_CLR> Please provide a valid buildspec file$_NORMAL_CLR"
-    exit 1
-fi
+# Validate Buildspec file
+function validate_buildspec() {
 
-if [ "$TEMP_BUILD_IMAGE" != "None" ]; then
+    if [ "$BUILDSPEC_FILE" != "None" ]; then
 
-    # Setting build image
-    BUILD_IMAGE=$TEMP_BUILD_IMAGE
+        if [ "$DEPLOYMENT_SOURCE_TYPE" == "git" ]; then
+            echo -e "$_NOTE_CLR> Since deployment source is set to ${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE_TYPE}${_NOTE_CLR}, not validating BuildSpec file.${_NORMAL_CLR}"
+        else
+            if [ "$DEPLOYMENT_SOURCE_TYPE" == "local" ]; then
+                if [ -f "${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}" ]; then
+                    echo -e "$_GENERAL_CLR> Setting BuildSpec file path to  '${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}${_GENERAL_CLR}'. Make sure this is valid BuildSpec file."
+                else
+                    echo -e "$_ERROR_CLR> Please provide a valid BuildSpec file. Check parameter ${_SUB_GEN_CLR}buildspec_file${_ERROR_CLR} in your configuration. ${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}${_ERROR_CLR} file does not exist.$_NORMAL_CLR"
+                fi
+            fi
+        fi
+    else
+        echo -e "$_ERROR_CLR> Please provide a valid BuildSpec file.$_NORMAL_CLR"
+        exit 1
+    fi
 
-else
-    BUILD_IMAGE=$DEFAULT_BUILD_IMAGE
-fi
+}
 
+# Set Build Image
+function set_build_image() {
+    if [ "$TEMP_BUILD_IMAGE" != "None" ]; then
+
+        # Setting build image
+        BUILD_IMAGE=$TEMP_BUILD_IMAGE
+
+        echo -e "$_GENERAL_CLR> Setting Build Image - ${_SUB_GEN_CLR}${BUILD_IMAGE}${_GENERAL_CLR}. $_NORMAL_CLR"
+
+    else
+        # Setting default build image
+        BUILD_IMAGE=$DEFAULT_BUILD_IMAGE
+
+        echo -e "$_NOTE_CLR> Build Image is not provided in configuration file. Using default build image - ${_SUB_GEN_CLR}${BUILD_IMAGE}${_NOTE_CLR}. $_NORMAL_CLR"
+    fi
+}
+
+# Validates and Sets configuration parameters defined in configuration file
 function set_configuration_parameters() {
 
     # Set AWS Credentials
@@ -234,6 +266,12 @@ function set_configuration_parameters() {
 
     # Set Deployment Source
     validate_and_set_deployment_source
+
+    # Validate Buildspec
+    validate_buildspec
+
+    # Set Bulild Image
+    set_build_image
 }
 
 ########################################################################################################################
@@ -253,7 +291,7 @@ main
 # END#
 ######
 
-echo "${_LINE_CLR}"
+echo "${_NOTE_CLR}"
 echo $AWS_ACCESS_KEY_ID
 echo $AWS_SECRET_ACCESS_KEY
 echo $AWS_SESSION_TOKEN

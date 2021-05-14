@@ -12,13 +12,15 @@ ${_BOLD_TEXT}${_GENERAL_CLR}DESCRIPTION${_NORMAL_CLR}
 
 ${_BOLD_TEXT}${_GENERAL_CLR}USAGE${_NORMAL_CLR}
 
-    ${_SUB_GEN_CLR}--help${_NORMAL_CLR}
-        Help
-
     ${_SUB_GEN_CLR}--config${_NORMAL_CLR}
-        Configuration File
+        Configuration File. Provide configuration as next argument.
+        If this argument is not provided it tries to read default file - ${_NOTE_CLR}local_codebuild_config.yml${_NORMAL_CLR}
 
+    ${_SUB_GEN_CLR}--debug${_NORMAL_CLR}
+        Enables debug. At this point debug works only when default configuration file is used.
 
+    ${_SUB_GEN_CLR}--help${_NORMAL_CLR}
+        Help.
 
 ${_BOLD_TEXT}${_GENERAL_CLR}CONFIGURATION FILE PARAMETERS${_NORMAL_CLR}
 
