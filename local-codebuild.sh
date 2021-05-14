@@ -16,6 +16,7 @@ set -e
 ########################################################################################################################
 
 DEFAULT_AWS_CREDENTIAL_FILE="${HOME}/.aws/credentials"
+DEFAULT_BUILD_IMAGE="amazonlinux"
 
 # Exporting color codes, so that it can be used in
 export _NORMAL_CLR=$(echo -en '\033[00;0m')
@@ -95,7 +96,8 @@ function read_configuration() {
         AWS_PROFILE=$(cat $CONFIG_FILE | wildq --input yaml ".aws_profile")
         BUILDSPEC_FILE=$(cat $CONFIG_FILE | wildq --input yaml ".buildspec_file")
         TEMP_AWS_CREDENTIAL_FILE=$(cat $CONFIG_FILE | wildq --input yaml ".aws_credential_file")
-        # NOTE - wildq returns None if key is not found`AWS_CREDENTIAL_FILE
+        TEMP_BUILD_IMAGE=$(cat $CONFIG_FILE | wildq --input yaml ".build_image")
+        # NOTE - wildq returns None if key is not found
 
     else
         echo -e "$_ERROR_CLR> Configuration file ${_SUB_GEN_CLR}${CONFIG_FILE}${_ERROR_CLR} does not exists. Please provide a valid configuration file $_NORMAL_CLR"
@@ -173,23 +175,65 @@ function validate_and_set_aws_credentials() {
 
 }
 
-# DEPLOYMENT SOURCE
-if [ "$DEPLOYMENT_SOURCE_TYPE" == "None" ]; then
-    echo -e "$_ERROR_CLR> Please provide a valid deployment source type $_NORMAL_CLR"
-fi
+function validate_and_set_deployment_source() {
+    # DEPLOYMENT SOURCE
+    if [ "$DEPLOYMENT_SOURCE_TYPE" != "None" ]; then
+        # If DEPLOYMENT_SOURCE_TYPE is neither git nor local
+        if ! { [ "$DEPLOYMENT_SOURCE_TYPE" == "git" ] || [ "$DEPLOYMENT_SOURCE_TYPE" == "local" ]; }; then
+            echo -e "$_ERROR_CLR> Please provide a valid deployment source type. Check parameter ${_SUB_GEN_CLR}deployment_source_type${_ERROR_CLR} in your configuration file.$_NORMAL_CLR"
+            exit 1
+        else
+            echo -e "$_GENERAL_CLR> Setting deployment source type as - ${_SUB_GEN_CLR} ${DEPLOYMENT_SOURCE_TYPE}${_NORMAL_CLR}"
 
-# DEPLOYMENT SOURCE
-if [ "$DEPLOYMENT_SOURCE" == "None" ]; then
-    echo -e "$_ERROR_CLR> Please provide a valid deployment source $_NORMAL_CLR"
-fi
+            # DEPLOYMENT SOURCE
+            if [ "$DEPLOYMENT_SOURCE" != "None" ]; then
+                if [ "$DEPLOYMENT_SOURCE_TYPE" == "git" ]; then
+                    echo -e "$_GENERAL_CLR> Setting deployment source as ${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}${_GENERAL_CLR}. Make sure this is valid. You are responsible for what happens next.${_NORMAL_CLR}"
+                else
+                    if [ "$DEPLOYMENT_SOURCE_TYPE" == "local" ]; then
+
+                        # Checking if source directory exists
+                        if [ -d $DEPLOYMENT_SOURCE ]; then
+                            echo -e "$_GENERAL_CLR> Setting deployment source as '${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}${_GENERAL_CLR}'. Make sure this is valid. You are responsible for what happens next.${_NORMAL_CLR}"
+                        else
+                            echo -e "$_ERROR_CLR> Please provide a valid deployment source. Check parameter ${_SUB_GEN_CLR}deployment_source${_ERROR_CLR} in your configuration file. $_NORMAL_CLR"
+                        fi
+                    fi
+                fi
+            else
+                echo -e "$_ERROR_CLR> Please provide a valid deployment source. Check parameter ${_SUB_GEN_CLR}deployment_source${_ERROR_CLR} in your configuration file. $_NORMAL_CLR"
+                exit 1
+            fi
+        fi
+    else
+        echo -e "$_ERROR_CLR> Please provide a valid deployment source type. Check parameter ${_SUB_GEN_CLR}deployment_source_type${_ERROR_CLR} in your configuration.$_NORMAL_CLR"
+        exit 1
+    fi
+
+}
 
 # BUILDSPEC
 if [ "$BUILDSPEC_FILE" == "None" ]; then
-    echo -e "$_ERROR_CLR> Please provide a valid deployment source $_NORMAL_CLR"
+    echo -e "$_ERROR_CLR> Please provide a valid buildspec file$_NORMAL_CLR"
+    exit 1
+fi
+
+if [ "$TEMP_BUILD_IMAGE" != "None" ]; then
+
+    # Setting build image
+    BUILD_IMAGE=$TEMP_BUILD_IMAGE
+
+else
+    BUILD_IMAGE=$DEFAULT_BUILD_IMAGE
 fi
 
 function set_configuration_parameters() {
+
+    # Set AWS Credentials
     validate_and_set_aws_credentials
+
+    # Set Deployment Source
+    validate_and_set_deployment_source
 }
 
 ########################################################################################################################
