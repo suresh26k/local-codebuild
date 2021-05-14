@@ -1,0 +1,5 @@
+aws_profile: default # AWS credentials profile. If set to default, it will read environment variables first.
+deployment_source_type: git # Accepts - local, git
+deployment_source: https://github.com/suresh26k/local-codebuild.git # Git clone url or Directory Path
+buildspec_file: cicd/buildspec.yml
+#aws_credential_file: noname # Optional, if not provided it will use default path ~/.aws/credentials
