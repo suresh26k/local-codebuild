@@ -17,6 +17,7 @@ set -e
 
 DEFAULT_AWS_CREDENTIAL_FILE="${HOME}/.aws/credentials"
 DEFAULT_BUILD_IMAGE="amazonlinux"
+BUILD_MOUNT_DIR="/tmp/local-codebuild/$(date +'%d%B%Y-%HH%MM%SS')"
 
 # Exporting color codes, so that it can be used in
 export _NORMAL_CLR=$(echo -en '\033[00;0m')
@@ -64,8 +65,8 @@ function set_argument() {
     --config)
         CONFIG_FILE="$2"
         ;;
-    --testx)
-        PARAMETER_TEXTX="$2"
+    --show-build-logs)
+        SHOW_BUILD_LOGS="$2"
         ;;
     *)
         echo -e "$_ERROR_CLR> Please provide a valid argument. $_NORMAL_CLR"
@@ -177,6 +178,7 @@ function validate_and_set_aws_credentials() {
         fi
     else
         echo -e "$_ERROR_CLR> Please provide a valid deployment source type. $_NORMAL_CLR"
+        exit 1
     fi
 
 }
@@ -203,6 +205,7 @@ function validate_and_set_deployment_source() {
                             echo -e "$_GENERAL_CLR> Setting deployment source as '${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}${_GENERAL_CLR}'. Make sure this is valid. You are responsible for what happens next.${_NORMAL_CLR}"
                         else
                             echo -e "$_ERROR_CLR> Please provide a valid deployment source. Check parameter ${_SUB_GEN_CLR}deployment_source${_ERROR_CLR} in your configuration file. $_NORMAL_CLR"
+                            exit 1
                         fi
                     fi
                 fi
@@ -218,7 +221,7 @@ function validate_and_set_deployment_source() {
 
 }
 
-# Validate Buildspec file
+# Validate BuildSpec file
 function validate_buildspec() {
 
     if [ "$BUILDSPEC_FILE" != "None" ]; then
@@ -228,9 +231,10 @@ function validate_buildspec() {
         else
             if [ "$DEPLOYMENT_SOURCE_TYPE" == "local" ]; then
                 if [ -f "${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}" ]; then
-                    echo -e "$_GENERAL_CLR> Setting BuildSpec file path to  '${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}${_GENERAL_CLR}'. Make sure this is valid BuildSpec file."
+                    echo -e "$_GENERAL_CLR> Setting BuildSpec file path to  '${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}${_GENERAL_CLR}'. Make sure this is valid BuildSpec file. $_NORMAL_CLR"
                 else
                     echo -e "$_ERROR_CLR> Please provide a valid BuildSpec file. Check parameter ${_SUB_GEN_CLR}buildspec_file${_ERROR_CLR} in your configuration. ${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}/${BUILDSPEC_FILE}${_ERROR_CLR} file does not exist.$_NORMAL_CLR"
+                    exit 1
                 fi
             fi
         fi
@@ -270,15 +274,115 @@ function set_configuration_parameters() {
     # Validate Buildspec
     validate_buildspec
 
-    # Set Bulild Image
+    # Set Build Image
     set_build_image
 }
 
+########################################################################################################################
+# BUILD DIR AND ENTRYPOINT SCRIPT                                                                                      #
+########################################################################################################################
+
+function create_build_mount_dir() {
+
+    echo -e "$_GENERAL_CLR> Setting Build Mount Directory - ${_SUB_GEN_CLR}${BUILD_MOUNT_DIR}${_GENERAL_CLR}. $_NORMAL_CLR"
+    mkdir -p ${BUILD_MOUNT_DIR}
+
+    echo -e "$_GENERAL_CLR> Copying build code to - ${_SUB_GEN_CLR}${BUILD_MOUNT_DIR}${_GENERAL_CLR}. $_NORMAL_CLR"
+
+    # If local -> Copy local code
+    if [ ${DEPLOYMENT_SOURCE_TYPE} == "local" ]; then
+        echo -e "$_GENERAL_CLR> Copying locally from - ${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}${_GENERAL_CLR}. $_NORMAL_CLR"
+        cp -pr ${DEPLOYMENT_SOURCE} ${BUILD_MOUNT_DIR}/code
+
+    else
+        if [ ${DEPLOYMENT_SOURCE_TYPE} == "git" ]; then
+            echo -e "$_GENERAL_CLR> Copying from git - ${_SUB_GEN_CLR}${DEPLOYMENT_SOURCE}${_GENERAL_CLR}. $_NORMAL_CLR"
+        fi
+    fi
+
+    # Else if git -> Copy from git
+
+}
+
+function create_entrypoint_script() {
+
+    # Check BuildSpec file.
+    if [ -f "${BUILD_MOUNT_DIR}/code/${BUILDSPEC_FILE}" ]; then
+        echo -e "$_GENERAL_CLR> Reading BuildSpec file - '${_SUB_GEN_CLR}${BUILD_MOUNT_DIR}/code/${BUILDSPEC_FILE}${_GENERAL_CLR}'.$_NORMAL_CLR"
+
+        # Entrypoint Script
+        ENTRYPOINT_SCRIPT=${BUILD_MOUNT_DIR}/code/local-codebuild-main.sh
+
+        # Creating a bash script which will be used for entrypoint
+        echo -e "$_GENERAL_CLR> Created ENTRYPOINT script - '${_SUB_GEN_CLR}${ENTRYPOINT_SCRIPT}${_GENERAL_CLR}'.$_NORMAL_CLR"
+        echo -e "#!/usr/bin/env bash\n" >${ENTRYPOINT_SCRIPT}
+        echo -e "set -x" >>${ENTRYPOINT_SCRIPT}
+
+        echo -e "\n# Switching to appropriate work directory" >>${ENTRYPOINT_SCRIPT}
+        echo -e "cd /code" >>${ENTRYPOINT_SCRIPT}
+
+        # READING BUILD SPEC FILE AND UPDATING THE BASH SCRIPT WHICH WILL BE USED FOR ENTRYPOINT
+        # Read Install Command
+        echo -e "\n# INSTALL" >>${ENTRYPOINT_SCRIPT}
+        cat ${BUILD_MOUNT_DIR}/code/${BUILDSPEC_FILE} |
+            wildq --input yaml ".phases.install.commands" --output json --monochrome-output |
+            jq -c -r '.[]' >>${ENTRYPOINT_SCRIPT}
+
+        echo -e "# BUILD" >>${ENTRYPOINT_SCRIPT}
+        cat ${BUILD_MOUNT_DIR}/code/${BUILDSPEC_FILE} |
+            wildq --input yaml ".phases.build.commands" --output json --monochrome-output |
+            jq -c -r '.[]' >>${ENTRYPOINT_SCRIPT}
+
+        # Making entrypoint script executable
+        chmod +x ${ENTRYPOINT_SCRIPT}
+
+    else
+        echo -e "$_ERROR_CLR> Error reading BuildSpec file - '${_SUB_GEN_CLR}${BUILD_MOUNT_DIR}/code/${BUILDSPEC_FILE}${_GENERAL_CLR}'.$_NORMAL_CLR"
+        exit 1
+    fi
+
+}
+
+########################################################################################################################
+# RUN BUILD                                                                                                            #
+########################################################################################################################
+
+
 function run_build() {
-#    {host} docker run -v /path/to/hostdir:/mnt --name my_container my_image
-#    {host} docker exec -it my_container bash
-#    {container} cp /mnt/sourcefile /path/to/destfile
-    echo ""
+
+    # Run container
+    container_id=$(
+        docker run \
+            -d \
+            --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+            --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+            --env AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+            --env AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION} \
+            --volume \
+            ${BUILD_MOUNT_DIR}/code:/code \
+            ${BUILD_IMAGE} \
+            bash code/local-codebuild-main.sh
+    )
+
+    # If execution is successful
+    if [ "$?" -eq 0 ]; then
+        echo -e "$_GENERAL_CLR> Executed container - '${_SUB_GEN_CLR}${container_id}${_GENERAL_CLR}'.$_NORMAL_CLR"
+        if [ "$SHOW_BUILD_LOGS" == "yes" ]; then
+            echo -e "${_NOTE_CLR}\n===============================================================$_NORMAL_CLR"
+            echo -e "${_NOTE_CLR}=         BUILD LOGS - CONTAINER                              =$_NORMAL_CLR"
+            echo -e "${_NOTE_CLR}===============================================================$_NORMAL_CLR"
+
+            # Show Logs
+            docker logs -f ${container_id}
+        else
+            echo -e "$_GENERAL_CLR> Run following command to check logs $_NORMAL_CLR"
+            echo -e "${_SUB_GEN_CLR}   docker logs -f ${container_id} $_NORMAL_CLR"
+        fi
+    else
+        echo -e "$_ERROR_CLR> Error while running docker container.$_NORMAL_CLR"
+        exit 1
+    fi
+
 }
 
 ########################################################################################################################
@@ -289,6 +393,8 @@ function run_build() {
 function main() {
     read_configuration
     set_configuration_parameters
+    create_build_mount_dir
+    create_entrypoint_script
     run_build
 }
 
@@ -300,9 +406,9 @@ main
 ######
 
 echo "${_NOTE_CLR}"
-echo $AWS_ACCESS_KEY_ID
-echo $AWS_SECRET_ACCESS_KEY
-echo $AWS_SESSION_TOKEN
-echo $AWS_DEFAULT_REGION
+#echo $AWS_ACCESS_KEY_ID
+#echo $AWS_SECRET_ACCESS_KEY
+#echo $AWS_SESSION_TOKEN
+#echo $AWS_DEFAULT_REGION
 echo "END"
 echo "${_NORMAL_CLR}"
