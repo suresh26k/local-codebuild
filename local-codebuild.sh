@@ -2,7 +2,7 @@
 
 ########################################################################################################################
 #       Author  : Suresh Kumar                                                                                         #
-#       Email   : gsuresh26kr@cerner.com                                                                               #
+#       Email   : gsuresh26kr@gmail.com                                                                               #
 #       About   : This script can be used to run codebuild locally                                                     #
 #       Use     : Execute this script with --help argument to know how to use this script                              #
 ########################################################################################################################
